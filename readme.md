@@ -1,138 +1,74 @@
-# Kafka
-Video Link: [Apache Kafka Crash Course | What is Kafka?](https://youtu.be/ZJJHm_bd9Zo)
-## Prerequisite
-- Knowledge
-  - Node.JS Intermediate level
-  - Experience with designing distributed systems
-- Tools
-  - Node.js: [Download Node.JS](https://nodejs.org/en)
-  - Docker: [Download Docker](https://www.docker.com)
-  - VsCode: [Download VSCode](https://code.visualstudio.com)
+# Kafka + Zookeeper — Single Container
 
-## Commands
-- Start Zookeper Container and expose PORT `2181`.
+One Docker image that runs both Zookeeper and Kafka (Zookeeper is started as a
+background daemon, then Kafka runs in the foreground so the container stays
+alive). Includes a small Node.js client app (`kafkajs`) to create a topic,
+produce messages, and consume them.
+
+## 1. Build the image
+
 ```bash
-docker run -p 2181:2181 zookeeper
+docker build -t kafka-zk .
 ```
-- Start Kafka Container, expose PORT `9092` and setup ENV variables.
+
+## 2. Run the container
+
 ```bash
-docker run -p 9092:9092 \
--e KAFKA_ZOOKEEPER_CONNECT=<PRIVATE_IP>:2181 \
--e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://<PRIVATE_IP>:9092 \
--e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
-confluentinc/cp-kafka
+docker run -d \
+  --name kafka-zk \
+  -p 2181:2181 \
+  -p 9092:9092 \
+  -e ADVERTISED_HOST=localhost \
+  kafka-zk
 ```
 
-## Code
-`client.js`
-```js
-const { Kafka } = require("kafkajs");
+- `2181` → Zookeeper
+- `9092` → Kafka broker
+- `ADVERTISED_HOST` should match the hostname/IP your Node app will use to
+  connect (use `localhost` when running the Node app on your host machine
+  against a container with published ports).
 
-exports.kafka = new Kafka({
-  clientId: "my-app",
-  brokers: ["<PRIVATE_IP>:9092"],
-});
+Check it booted correctly:
 
-```
-`admin.js`
-```js
-const { kafka } = require("./client");
-
-async function init() {
-  const admin = kafka.admin();
-  console.log("Admin connecting...");
-  admin.connect();
-  console.log("Adming Connection Success...");
-
-  console.log("Creating Topic [rider-updates]");
-  await admin.createTopics({
-    topics: [
-      {
-        topic: "rider-updates",
-        numPartitions: 2,
-      },
-    ],
-  });
-  console.log("Topic Created Success [rider-updates]");
-
-  console.log("Disconnecting Admin..");
-  await admin.disconnect();
-}
-
-init();
-```
-`producer.js`
-```js
-const { kafka } = require("./client");
-const readline = require("readline");
-
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
-
-async function init() {
-  const producer = kafka.producer();
-
-  console.log("Connecting Producer");
-  await producer.connect();
-  console.log("Producer Connected Successfully");
-
-  rl.setPrompt("> ");
-  rl.prompt();
-
-  rl.on("line", async function (line) {
-    const [riderName, location] = line.split(" ");
-    await producer.send({
-      topic: "rider-updates",
-      messages: [
-        {
-          partition: location.toLowerCase() === "north" ? 0 : 1,
-          key: "location-update",
-          value: JSON.stringify({ name: riderName, location }),
-        },
-      ],
-    });
-  }).on("close", async () => {
-    await producer.disconnect();
-  });
-}
-
-init();
-```
-`consumer.js`
-```js
-const { kafka } = require("./client");
-const group = process.argv[2];
-
-async function init() {
-  const consumer = kafka.consumer({ groupId: group });
-  await consumer.connect();
-
-  await consumer.subscribe({ topics: ["rider-updates"], fromBeginning: true });
-
-  await consumer.run({
-    eachMessage: async ({ topic, partition, message, heartbeat, pause }) => {
-      console.log(
-        `${group}: [${topic}]: PART:${partition}:`,
-        message.value.toString()
-      );
-    },
-  });
-}
-
-init();
-```
-## Running Locally
-- Run Multiple Consumers
 ```bash
-node consumer.js <GROUP_NAME>
+docker logs -f kafka-zk
 ```
-- Create Producer
+
+You should see Zookeeper start, then Kafka start and stay running.
+
+## 3. Run the Node.js client
+
 ```bash
-node producer.js
+cd app
+npm install
+
+npm run create-topic   # creates "demo-topic"
+npm run consume        # in one terminal, starts listening
+npm run produce        # in another terminal, sends 10 messages
 ```
+
+Environment variables you can override:
+
+| Variable          | Default            | Purpose                              |
+|-------------------|---------------------|---------------------------------------|
+| `KAFKA_BROKER`    | `localhost:9092`    | Broker address(es), comma-separated   |
+| `KAFKA_TOPIC`      | `demo-topic`         | Topic to produce/consume              |
+| `KAFKA_GROUP_ID`   | `demo-group`         | Consumer group id                     |
+
+## Notes
+
+- This single-container setup is meant for local dev/testing. For production
+  you'd normally run Zookeeper and Kafka as separate containers/services
+  (and eventually move to KRaft mode, which drops Zookeeper entirely).
+- Data is written to `/var/lib/zookeeper/data` and `/var/lib/kafka/data`
+  inside the container. Mount volumes at those paths if you want data to
+  survive container restarts:
+
 ```bash
-> tony south
-> tony north
+docker run -d \
+  --name kafka-zk \
+  -p 2181:2181 -p 9092:9092 \
+  -v kafka-zk-data:/var/lib/kafka/data \
+  -v zk-data:/var/lib/zookeeper/data \
+  kafka-zk
 ```
