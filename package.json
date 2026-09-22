@@ -1,0 +1,10 @@
+{
+    "name": "kafka-zookeeper-container",
+    "version": "1.0.0",
+    "description": "Single Docker container running ZooKeeper and Kafka using Node.js",
+    "main": "server.js",
+    "scripts": {
+      "start": "node server.js"
+    },
+    "dependencies": {}
+  }
