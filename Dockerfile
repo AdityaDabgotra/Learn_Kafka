@@ -1,6 +1,6 @@
 FROM eclipse-temurin:11-jre-jammy
 
-ENV KAFKA_VERSION=3.6.1 \
+ENV KAFKA_VERSION=3.9.2 \
     SCALA_VERSION=2.13 \
     KAFKA_HOME=/opt/kafka
 
