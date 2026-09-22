@@ -1,10 +1,15 @@
 {
-    "name": "kafka-zookeeper-container",
+    "name": "kafka-zk-node-client",
     "version": "1.0.0",
-    "description": "Single Docker container running ZooKeeper and Kafka using Node.js",
-    "main": "server.js",
+    "description": "Node.js producer/consumer example for the single-container Kafka+Zookeeper image",
+    "main": "index.js",
+    "type": "commonjs",
     "scripts": {
-      "start": "node server.js"
+      "create-topic": "node createTopic.js",
+      "produce": "node producer.js",
+      "consume": "node consumer.js"
     },
-    "dependencies": {}
+    "dependencies": {
+      "kafkajs": "^2.2.4"
+    }
   }
